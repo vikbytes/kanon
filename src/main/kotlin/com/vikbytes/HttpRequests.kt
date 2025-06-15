@@ -27,7 +27,10 @@ object HttpRequests {
     ): HttpClient {
         return HttpClient(Java) {
             install(HttpTimeout) { requestTimeoutMillis = requestTimeout.toLong() }
-            engine { protocolVersion = java.net.http.HttpClient.Version.HTTP_1_1 }
+            engine {
+                protocolVersion = java.net.http.HttpClient.Version.HTTP_1_1
+                dispatcher = Dispatchers.Default
+            }
             defaultRequest { header(HttpHeaders.Connection, "close") }
         }
     }
