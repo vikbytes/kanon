@@ -22,6 +22,7 @@ object StatisticsHelper {
         val max: Long,
         val avg: Double,
         val median: Double,
+        val p25: Long,
         val p50: Long,
         val p75: Long,
         val p90: Long,
@@ -47,7 +48,8 @@ object StatisticsHelper {
                     sortedTimes[totalResponses / 2].toDouble()
                 }
             } else 0.0
-
+        val p25 =
+            if (totalResponses > 0) sortedTimes[(totalResponses * 0.25).toInt().coerceAtMost(totalResponses - 1)] else 0
         val p50 =
             if (totalResponses > 0) sortedTimes[(totalResponses * 0.50).toInt().coerceAtMost(totalResponses - 1)] else 0
         val p75 =
@@ -65,6 +67,6 @@ object StatisticsHelper {
         val histogram = Histogram(3600000L, 2)
         responseTimes.forEach { histogram.recordValue(it) }
 
-        return ResponseTimeStats(min, max, avg, median, p50, p75, p90, p95, p99, p999, histogram)
+        return ResponseTimeStats(min, max, avg, median, p25, p50, p75, p90, p95, p99, p999, histogram)
     }
 }
