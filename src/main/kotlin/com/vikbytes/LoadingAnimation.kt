@@ -1,8 +1,8 @@
 package com.vikbytes
 
-import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.*
 
 object LoadingAnimation {
     private val isRunning = AtomicBoolean(false)
@@ -68,7 +68,7 @@ object LoadingAnimation {
         animationJob?.cancel()
         animationJob = null
         isRunning.set(false)
-        print("\r" + " ".repeat(100) + "\r") // Clear the line
+        print("\r" + " ".repeat(100) + "\r")
     }
 
     private fun createProgressBar(percentage: Int): String {

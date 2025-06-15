@@ -14,7 +14,7 @@ object StatisticsHelper {
         val statusCodes: ConcurrentHashMap<Int, AtomicInteger> = ConcurrentHashMap(),
         val requestBytes: AtomicInteger = AtomicInteger(0),
         val responseBytes: AtomicInteger = AtomicInteger(0),
-        val histogram: Histogram = Histogram(3600000L, 2) // 1 hour max value with 2 significant digits
+        val histogram: Histogram = Histogram(3600000L, 2)
     )
 
     data class ResponseTimeStats(
@@ -39,23 +39,30 @@ object StatisticsHelper {
         val max = sortedTimes.lastOrNull() ?: 0
         val avg = if (totalResponses > 0) sortedTimes.average() else 0.0
 
-        val median = if (totalResponses > 0) {
-            if (totalResponses % 2 == 0) {
-                (sortedTimes[totalResponses / 2 - 1].toDouble() + sortedTimes[totalResponses / 2].toDouble()) / 2.0
-            } else {
-                sortedTimes[totalResponses / 2].toDouble()
-            }
-        } else 0.0
+        val median =
+            if (totalResponses > 0) {
+                if (totalResponses % 2 == 0) {
+                    (sortedTimes[totalResponses / 2 - 1].toDouble() + sortedTimes[totalResponses / 2].toDouble()) / 2.0
+                } else {
+                    sortedTimes[totalResponses / 2].toDouble()
+                }
+            } else 0.0
 
-        val p50 = if (totalResponses > 0) sortedTimes[(totalResponses * 0.50).toInt().coerceAtMost(totalResponses - 1)] else 0
-        val p75 = if (totalResponses > 0) sortedTimes[(totalResponses * 0.75).toInt().coerceAtMost(totalResponses - 1)] else 0
-        val p90 = if (totalResponses > 0) sortedTimes[(totalResponses * 0.90).toInt().coerceAtMost(totalResponses - 1)] else 0
-        val p95 = if (totalResponses > 0) sortedTimes[(totalResponses * 0.95).toInt().coerceAtMost(totalResponses - 1)] else 0
-        val p99 = if (totalResponses > 0) sortedTimes[(totalResponses * 0.99).toInt().coerceAtMost(totalResponses - 1)] else 0
-        val p999 = if (totalResponses > 0) sortedTimes[(totalResponses * 0.999).toInt().coerceAtMost(totalResponses - 1)] else 0
+        val p50 =
+            if (totalResponses > 0) sortedTimes[(totalResponses * 0.50).toInt().coerceAtMost(totalResponses - 1)] else 0
+        val p75 =
+            if (totalResponses > 0) sortedTimes[(totalResponses * 0.75).toInt().coerceAtMost(totalResponses - 1)] else 0
+        val p90 =
+            if (totalResponses > 0) sortedTimes[(totalResponses * 0.90).toInt().coerceAtMost(totalResponses - 1)] else 0
+        val p95 =
+            if (totalResponses > 0) sortedTimes[(totalResponses * 0.95).toInt().coerceAtMost(totalResponses - 1)] else 0
+        val p99 =
+            if (totalResponses > 0) sortedTimes[(totalResponses * 0.99).toInt().coerceAtMost(totalResponses - 1)] else 0
+        val p999 =
+            if (totalResponses > 0) sortedTimes[(totalResponses * 0.999).toInt().coerceAtMost(totalResponses - 1)]
+            else 0
 
-        // Create a histogram from the response times
-        val histogram = Histogram(3600000L, 2) // 1 hour max value with 2 significant digits
+        val histogram = Histogram(3600000L, 2)
         responseTimes.forEach { histogram.recordValue(it) }
 
         return ResponseTimeStats(min, max, avg, median, p50, p75, p90, p95, p99, p999, histogram)

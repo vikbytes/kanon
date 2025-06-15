@@ -206,7 +206,8 @@ object HttpRequests {
                 }
 
             val responseTimeStats = calculateResponseTimeStats(statistics.responseTimes)
-            val results = formatResults(statistics, totalExecutionTime, concurrency, responseTimeStats, noBandwidth, torture)
+            val results =
+                formatResults(statistics, totalExecutionTime, concurrency, responseTimeStats, noBandwidth, torture)
 
             if (saveToFile) {
                 saveResultsToFile(url, results)
@@ -332,7 +333,6 @@ object HttpRequests {
             val responseTime = endTime - startTime
             if (!silent) {
                 responseTimes.add(responseTime)
-                // Record the response time in the histogram if provided
                 histogram?.recordValue(responseTime)
                 if (response.status.isSuccess()) {
                     successCount.incrementAndGet()
