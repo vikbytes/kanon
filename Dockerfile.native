@@ -1,0 +1,19 @@
+FROM container-registry.oracle.com/graalvm/native-image:24
+
+RUN microdnf install -y findutils grep sed
+
+WORKDIR /app
+COPY . /app
+
+ENV GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=8g -Dorg.gradle.parallel=true -Dorg.gradle.daemon=false"
+
+RUN ./gradlew --no-daemon clean nativeCompile --stacktrace --info
+
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+RUN VERSION=$(./gradlew properties -q | grep "version:" | awk '{print $2}') && \
+    cp build/native/nativeCompile/kanon-$VERSION /app/kanon && \
+    chmod +x /app/kanon
+
+ENTRYPOINT ["/app/kanon"]
