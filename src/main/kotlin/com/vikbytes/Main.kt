@@ -51,6 +51,7 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
     private val torture by
         option("--torture").flag().help("Executes as many threads as possible, ignoring the concurrency option")
     private val noBandwidth by option("--no-bandwidth").flag().help("Disables bandwidth collection and reporting")
+    private val followRedirects by option("-l", "--location").flag().help("Follow redirects (HTTP 301, 302, etc.)")
 
     fun validateArguments() {
         if ((totalRequests == null && durationSeconds == null) || (totalRequests != null && durationSeconds != null)) {
@@ -132,7 +133,8 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
                 saveToFile = saveToFile,
                 headless = ci,
                 torture = torture,
-                noBandwidth = noBandwidth)
+                noBandwidth = noBandwidth,
+                followRedirects = requestParams["followRedirects"]?.toBoolean() ?: followRedirects)
         }
     }
 
@@ -142,6 +144,7 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
         var requestHeaders = headers
         var requestAuthorization = authorization
         var requestJsonBody = jsonBody
+        var requestFollowRedirects = followRedirects.toString()
 
         if (curl != null) {
             val curlString = curl.toString()
@@ -151,6 +154,7 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
             requestHeaders = curlParams["headers"]
             requestAuthorization = curlParams["authorization"]
             requestJsonBody = curlParams["body"]
+            requestFollowRedirects = curlParams["followRedirects"] ?: followRedirects.toString()
         } else if (curlFile != null && requestUrl == null) {
             val curlContent = File(curlFile!!).readText()
             val curlParams = processCurlCommand(curlContent, true, curlFile!!)
@@ -159,6 +163,7 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
             requestHeaders = curlParams["headers"]
             requestAuthorization = curlParams["authorization"]
             requestJsonBody = curlParams["body"]
+            requestFollowRedirects = curlParams["followRedirects"] ?: followRedirects.toString()
         } else if (requestUrl == null) {
             throw UsageError(
                 "URL is required. ".boldRed() +
@@ -175,7 +180,8 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
             "method" to requestMethod,
             "headers" to requestHeaders,
             "authorization" to requestAuthorization,
-            "body" to requestJsonBody)
+            "body" to requestJsonBody,
+            "followRedirects" to requestFollowRedirects)
     }
 
     fun displayRequestInfo(requestParams: Map<String, String?>) {
@@ -184,6 +190,7 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
         val requestHeaders = requestParams["headers"]
         val requestAuthorization = requestParams["authorization"]
         val requestJsonBody = requestParams["body"]
+        val requestFollowRedirects = requestParams["followRedirects"]?.toBoolean() ?: followRedirects
 
         val argsToPrint = mutableListOf<String>()
         print("Kanon".boldPurple() + " ")
@@ -231,6 +238,10 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
 
         if (requestJsonBody != null) {
             argsToPrint.add("JSON Body: ".bold() + requestJsonBody.cyan())
+        }
+
+        if (requestFollowRedirects) {
+            argsToPrint.add("Following redirects: ".bold() + "enabled".green())
         }
 
         if (argsToPrint.isNotEmpty()) {

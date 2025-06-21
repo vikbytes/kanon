@@ -9,7 +9,8 @@ object CurlHelpers {
         val url: String,
         val method: String = "GET",
         val headers: MutableMap<String, String> = mutableMapOf(),
-        val body: String? = null
+        val body: String? = null,
+        val followRedirects: Boolean = false
     )
 
     fun processCurlCommand(
@@ -41,6 +42,7 @@ object CurlHelpers {
             }
 
             result["body"] = curlCommand.body
+            result["followRedirects"] = curlCommand.followRedirects.toString()
 
             if (isFromFile) {
                 println("Parsed cURL command from file: ".green() + curlFile.boldGreen())
@@ -75,6 +77,11 @@ object CurlHelpers {
         val headers = mutableMapOf<String, String>()
         var body: String? = null
         val bodyParts = mutableListOf<String>()
+        var userAgent: String? = null
+        var referer: String? = null
+        var cookie: String? = null
+        var basicAuth: String? = null
+        var followRedirects = false
 
         val parts = splitRespectingQuotes(trimmedCommand)
 
@@ -84,7 +91,7 @@ object CurlHelpers {
             when {
                 part == "-X" || part == "--request" -> {
                     if (i + 1 < parts.size) {
-                        method = parts[++i]
+                        method = parts[++i].uppercase()
                     }
                 }
 
@@ -116,6 +123,65 @@ object CurlHelpers {
                     }
                 }
 
+                part == "--data-urlencode" -> {
+                    if (i + 1 < parts.size) {
+                        bodyParts.add(parts[++i].trim('"', '\''))
+                        if (method == "GET") {
+                            method = "POST"
+                        }
+                    }
+                }
+
+                part == "-A" || part == "--user-agent" -> {
+                    if (i + 1 < parts.size) {
+                        userAgent = parts[++i].trim('"', '\'')
+                        headers["User-Agent"] = userAgent
+                    }
+                }
+
+                part == "-e" || part == "--referer" -> {
+                    if (i + 1 < parts.size) {
+                        referer = parts[++i].trim('"', '\'')
+                        headers["Referer"] = referer
+                    }
+                }
+
+                part == "-b" || part == "--cookie" -> {
+                    if (i + 1 < parts.size) {
+                        cookie = parts[++i].trim('"', '\'')
+                        headers["Cookie"] = cookie
+                    }
+                }
+
+                part == "-u" || part == "--user" -> {
+                    if (i + 1 < parts.size) {
+                        basicAuth = parts[++i].trim('"', '\'')
+                        val encodedAuth = java.util.Base64.getEncoder().encodeToString(basicAuth.toByteArray())
+                        headers["Authorization"] = "Basic $encodedAuth"
+                    }
+                }
+
+                part == "--url" -> {
+                    if (i + 1 < parts.size) {
+                        url = parts[++i].trim('"', '\'')
+                    }
+                }
+
+                part == "-o" || part == "--output" -> {
+                    // Skip output file parameter
+                    if (i + 1 < parts.size) {
+                        i++
+                    }
+                }
+
+                part == "-L" || part == "--location" -> {
+                    followRedirects = true
+                }
+
+                part == "-k" || part == "--insecure" -> {
+                    // Flag for insecure connections, no action needed for parsing
+                }
+
                 !part.startsWith("-") && url.isEmpty() -> {
                     url = part.trim('"', '\'')
                 }
@@ -132,7 +198,7 @@ object CurlHelpers {
             body = bodyParts.joinToString("&")
         }
 
-        return CurlCommand(url, method, headers, body)
+        return CurlCommand(url, method, headers, body, followRedirects)
     }
 
     fun splitRespectingQuotes(input: String): List<String> {

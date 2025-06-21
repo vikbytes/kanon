@@ -6,6 +6,7 @@ import com.vikbytes.StatisticsHelper.calculateResponseTimeStats
 import io.ktor.client.*
 import io.ktor.client.engine.java.Java
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.HttpRedirect
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.*
 import io.ktor.client.statement.bodyAsText
@@ -24,9 +25,13 @@ object HttpRequests {
 
     fun createHttpClient(
         requestTimeout: Int,
+        followRedirects: Boolean = false
     ): HttpClient {
         return HttpClient(Java) {
             install(HttpTimeout) { requestTimeoutMillis = requestTimeout.toLong() }
+            if (followRedirects) {
+                install(HttpRedirect)
+            }
             engine {
                 protocolVersion = java.net.http.HttpClient.Version.HTTP_1_1
                 dispatcher = Dispatchers.Default
@@ -157,9 +162,10 @@ object HttpRequests {
         saveToFile: Boolean,
         headless: Boolean,
         torture: Boolean = false,
-        noBandwidth: Boolean = false
+        noBandwidth: Boolean = false,
+        followRedirects: Boolean = false
     ): String {
-        val client = createHttpClient(requestTimeout)
+        val client = createHttpClient(requestTimeout, followRedirects)
 
         try {
             val statistics = StatisticsHelper.RequestStatistics()
