@@ -12,7 +12,11 @@ object CurlHelpers {
         val body: String? = null
     )
 
-    fun processCurlCommand(curlString: String, isFromFile: Boolean = false, curlFile: String): Map<String, String?> {
+    fun processCurlCommand(
+        curlString: String,
+        isFromFile: Boolean = false,
+        curlFile: String = ""
+    ): Map<String, String?> {
         try {
             val normalizedCurlString =
                 if (!curlString.trim().startsWith("curl ")) {
@@ -57,7 +61,6 @@ object CurlHelpers {
     }
 
     fun parseCurlCommand(curlString: String): CurlCommand {
-
         val normalizedCurlString =
             if (!curlString.trim().startsWith("curl ")) {
                 "curl $curlString"
@@ -71,6 +74,7 @@ object CurlHelpers {
         var method = "GET"
         val headers = mutableMapOf<String, String>()
         var body: String? = null
+        val bodyParts = mutableListOf<String>()
 
         val parts = splitRespectingQuotes(trimmedCommand)
 
@@ -98,7 +102,7 @@ object CurlHelpers {
 
                 part == "-d" || part == "--data" || part == "--data-ascii" || part == "--data-binary" -> {
                     if (i + 1 < parts.size) {
-                        body = parts[++i].trim('"', '\'')
+                        bodyParts.add(parts[++i].trim('"', '\''))
                         if (method == "GET") {
                             method = "POST"
                         }
@@ -106,7 +110,7 @@ object CurlHelpers {
                 }
 
                 part.startsWith("-d") -> {
-                    body = part.substring(2).trim('"', '\'')
+                    bodyParts.add(part.substring(2).trim('"', '\''))
                     if (method == "GET") {
                         method = "POST"
                     }
@@ -124,19 +128,28 @@ object CurlHelpers {
             throw IllegalArgumentException("URL not found in cURL command")
         }
 
+        if (bodyParts.isNotEmpty()) {
+            body = bodyParts.joinToString("&")
+        }
+
         return CurlCommand(url, method, headers, body)
     }
 
     fun splitRespectingQuotes(input: String): List<String> {
         val result = mutableListOf<String>()
-        val pattern = Pattern.compile("[^\\s\"']+|\"([^\"]*)\"|'([^']*)'")
+        // 1. Sequences of non-whitespace, non-quote characters
+        // 2. Double-quoted strings, handling escaped quotes
+        // 3. Single-quoted strings, handling escaped quotes
+        val pattern = Pattern.compile("[^\\s\"']+|\"((?:\\\\.|[^\\\\\"])*)\"|'((?:\\\\.|[^\\\\'])*)'")
         val matcher = pattern.matcher(input)
 
         while (matcher.find()) {
             if (matcher.group(1) != null) {
-                result.add("\"" + matcher.group(1) + "\"")
+                val content = matcher.group(1).replace("\\\\", "\\").replace("\\\"", "\"")
+                result.add("\"" + content + "\"")
             } else if (matcher.group(2) != null) {
-                result.add("'" + matcher.group(2) + "'")
+                val content = matcher.group(2).replace("\\\\", "\\").replace("\\'", "'")
+                result.add("'" + content + "'")
             } else {
                 result.add(matcher.group())
             }
