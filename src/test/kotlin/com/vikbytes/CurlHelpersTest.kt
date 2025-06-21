@@ -114,6 +114,17 @@ class CurlHelpersTest {
         assertEquals("Content-Type: application/json,Authorization: Bearer token", result["headers"])
         assertEquals("Bearer token", result["authorization"])
         assertEquals(null, result["body"])
+        assertEquals("false", result["followRedirects"])
+    }
+
+    @Test
+    fun `test processCurlCommand with follow redirects option`() {
+        val curlString = "curl -L https://example.com"
+        val result = CurlHelpers.processCurlCommand(curlString, false, "")
+
+        assertEquals("https://example.com", result["url"])
+        assertEquals("GET", result["method"])
+        assertEquals("true", result["followRedirects"])
     }
 
     @Test
@@ -302,5 +313,174 @@ class CurlHelpersTest {
         assertEquals(11, result.headers.size)
         assertContains(result.body ?: "", "\"query\":{\"bool\":{\"must\":[{\"term\":{\"status\":\"active\"}}")
         assertContains(result.headers["Authorization"] ?: "", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")
+    }
+
+    @Test
+    fun `test parseCurlCommand with data-urlencode parameter`() {
+        val curlString = "curl --data-urlencode \"name=John Doe\" https://example.com/api"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com/api", result.url)
+        assertEquals("POST", result.method)
+        assertEquals("name=John Doe", result.body)
+    }
+
+    @Test
+    fun `test parseCurlCommand with explicit url parameter`() {
+        val curlString = "curl --url https://example.com/api"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com/api", result.url)
+        assertEquals("GET", result.method)
+    }
+
+    @Test
+    fun `test parseCurlCommand with user-agent parameter`() {
+        val curlString = "curl -A \"Mozilla/5.0 (Windows NT 10.0; Win64; x64)\" https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com", result.url)
+        assertEquals("GET", result.method)
+        assertEquals("Mozilla/5.0 (Windows NT 10.0; Win64; x64)", result.headers["User-Agent"])
+    }
+
+    @Test
+    fun `test parseCurlCommand with cookie parameter`() {
+        val curlString = "curl -b \"session=abc123; user=john\" https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com", result.url)
+        assertEquals("GET", result.method)
+        assertEquals("session=abc123; user=john", result.headers["Cookie"])
+    }
+
+    @Test
+    fun `test parseCurlCommand with referer parameter`() {
+        val curlString = "curl -e \"https://referrer.com\" https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com", result.url)
+        assertEquals("GET", result.method)
+        assertEquals("https://referrer.com", result.headers["Referer"])
+    }
+
+    @Test
+    fun `test parseCurlCommand with basic authentication`() {
+        val curlString = "curl -u username:password https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com", result.url)
+        assertEquals("GET", result.method)
+        val encodedAuth = java.util.Base64.getEncoder().encodeToString("username:password".toByteArray())
+        assertEquals("Basic $encodedAuth", result.headers["Authorization"])
+    }
+
+    @Test
+    fun `test parseCurlCommand with multiple body parameters`() {
+        val curlString = "curl -d \"param1=value1\" -d \"param2=value2\" https://example.com/api"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com/api", result.url)
+        assertEquals("POST", result.method)
+        // Multiple body parameters should be combined with &
+        assertEquals("param1=value1&param2=value2", result.body)
+    }
+
+    @Test
+    fun `test parseCurlCommand with escaped characters in URL`() {
+        val curlString = "curl \"https://example.com/api?q=escaped\\\"quote\\\"&param=value\""
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        val expectedUrl = "https://example.com/api?q=escaped\"quote\"&param=value"
+        assertEquals(expectedUrl, result.url)
+        assertEquals("GET", result.method)
+    }
+
+    @Test
+    fun `test parseCurlCommand with escaped characters in headers`() {
+        val curlString =
+            "curl -H \"X-Custom-Header: Value with escaped \\\"quotes\\\" and \\\\backslashes\" https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        val expectedValue = "Value with escaped \"quotes\" and \\backslashes"
+        assertEquals(expectedValue, result.headers["X-Custom-Header"])
+    }
+
+    @Test
+    fun `test parseCurlCommand with escaped characters in body`() {
+        val curlString =
+            "curl -d \"{\\\"key\\\":\\\"value with \\\\\\\"nested quotes\\\\\\\"\\\"}\" https://example.com/api"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        val expectedBody = "{\"key\":\"value with \\\"nested quotes\\\"\"}"
+        assertEquals(expectedBody, result.body)
+    }
+
+    @Test
+    fun `test parseCurlCommand with multiple URLs takes the first one`() {
+        val curlString = "curl https://first-example.com https://second-example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://first-example.com", result.url)
+        assertEquals("GET", result.method)
+    }
+
+    @Test
+    fun `test parseCurlCommand with output options`() {
+        val curlString = "curl -o output.txt https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com", result.url)
+        assertEquals("GET", result.method)
+    }
+
+    @Test
+    fun `test parseCurlCommand with follow redirects option using -L`() {
+        val curlString = "curl -L https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com", result.url)
+        assertEquals("GET", result.method)
+        assertTrue(result.followRedirects, "followRedirects should be true when -L flag is used")
+    }
+
+    @Test
+    fun `test parseCurlCommand with follow redirects option using --location`() {
+        val curlString = "curl --location https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com", result.url)
+        assertEquals("GET", result.method)
+        assertTrue(result.followRedirects, "followRedirects should be true when --location flag is used")
+    }
+
+    @Test
+    fun `test parseCurlCommand with insecure option`() {
+        val curlString = "curl -k https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com", result.url)
+        assertEquals("GET", result.method)
+        // Note: The current implementation doesn't handle the -k flag
+        // This test documents the current behavior
+    }
+
+    @Test
+    fun `test parseCurlCommand with custom request method in lowercase`() {
+        val curlString = "curl -X post https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com", result.url)
+        assertEquals("POST", result.method) // Method is now normalized to uppercase
+    }
+
+    @Test
+    fun `test parseCurlCommand with data from file`() {
+        val curlString = "curl -d @data.json https://example.com/api"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com/api", result.url)
+        assertEquals("POST", result.method)
+        assertEquals("@data.json", result.body)
     }
 }
