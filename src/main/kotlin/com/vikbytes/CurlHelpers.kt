@@ -1,6 +1,7 @@
 package com.vikbytes
 
 import com.github.ajalt.clikt.core.UsageError
+import java.util.Base64
 import java.util.regex.Pattern
 
 object CurlHelpers {
@@ -77,10 +78,10 @@ object CurlHelpers {
         val headers = mutableMapOf<String, String>()
         var body: String? = null
         val bodyParts = mutableListOf<String>()
-        var userAgent: String? = null
-        var referer: String? = null
-        var cookie: String? = null
-        var basicAuth: String? = null
+        var userAgent: String?
+        var referer: String?
+        var cookie: String?
+        var basicAuth: String?
         var followRedirects = false
 
         val parts = splitRespectingQuotes(trimmedCommand)
@@ -100,7 +101,7 @@ object CurlHelpers {
                         val header = parts[++i].trim('"', '\'')
                         val colonIndex = header.indexOf(':')
                         if (colonIndex > 0) {
-                            val key = header.substring(0, colonIndex).trim()
+                            val key = header.take(colonIndex).trim()
                             val value = header.substring(colonIndex + 1).trim()
                             headers[key] = value
                         }
@@ -156,7 +157,7 @@ object CurlHelpers {
                 part == "-u" || part == "--user" -> {
                     if (i + 1 < parts.size) {
                         basicAuth = parts[++i].trim('"', '\'')
-                        val encodedAuth = java.util.Base64.getEncoder().encodeToString(basicAuth.toByteArray())
+                        val encodedAuth = Base64.getEncoder().encodeToString(basicAuth.toByteArray())
                         headers["Authorization"] = "Basic $encodedAuth"
                     }
                 }
@@ -215,7 +216,7 @@ object CurlHelpers {
                 result.add("\"" + content + "\"")
             } else if (matcher.group(2) != null) {
                 val content = matcher.group(2).replace("\\\\", "\\").replace("\\'", "'")
-                result.add("'" + content + "'")
+                result.add("'$content'")
             } else {
                 result.add(matcher.group())
             }

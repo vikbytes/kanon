@@ -5,8 +5,8 @@ import com.vikbytes.ResultFormatter.saveResultsToFile
 import com.vikbytes.StatisticsHelper.calculateResponseTimeStats
 import io.ktor.client.*
 import io.ktor.client.engine.java.Java
-import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.HttpRedirect
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.*
 import io.ktor.client.statement.bodyAsText
@@ -19,14 +19,12 @@ import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 
 object HttpRequests {
 
-    fun createHttpClient(
-        requestTimeout: Int,
-        followRedirects: Boolean = false
-    ): HttpClient {
+    fun createHttpClient(requestTimeout: Int, followRedirects: Boolean = false): HttpClient {
         return HttpClient(Java) {
             install(HttpTimeout) { requestTimeoutMillis = requestTimeout.toLong() }
             if (followRedirects) {
@@ -143,7 +141,7 @@ object HttpRequests {
                 }
             }
 
-        jobs.forEach { it.join() }
+        jobs.joinAll()
 
         val finalTime = System.currentTimeMillis()
         return Duration.parse("${finalTime - startTime}ms")
@@ -170,22 +168,19 @@ object HttpRequests {
         try {
             val statistics = StatisticsHelper.RequestStatistics()
             val progressTracker: AtomicInteger?
-            val animationJob =
-                if (!headless) {
-                    if (totalRequests != null) {
-                        val message = "Executing requests"
-                        val (job, progress) = LoadingAnimation.startProgressBar(message, totalRequests)
-                        progressTracker = progress
-                        job
-                    } else {
-                        val message = "Executing requests for ${durationSeconds}s"
-                        progressTracker = null
-                        LoadingAnimation.startRequestSpinner(message, statistics.successCount, statistics.failureCount)
-                    }
+            if (!headless) {
+                if (totalRequests != null) {
+                    val message = "Executing requests"
+                    val (job, progress) = LoadingAnimation.startProgressBar(message, totalRequests)
+                    progressTracker = progress
                 } else {
+                    val message = "Executing requests for ${durationSeconds}s"
                     progressTracker = null
-                    null
+                    LoadingAnimation.startRequestSpinner(message, statistics.successCount, statistics.failureCount)
                 }
+            } else {
+                progressTracker = null
+            }
 
             executeRequestsInParallel(
                 client,
