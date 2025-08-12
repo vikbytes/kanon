@@ -27,6 +27,7 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
                 "unknown"
             }
         } catch (e: Exception) {
+            println("Failed to load version information: ${e.message}")
             "unknown"
         }
     }
@@ -100,6 +101,7 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
                         InetAddress.getByName(URI(it).host)
                         url.replace("http://", "https://")
                     } catch (e: Exception) {
+                        println("Failed to resolve DNS for $url: ${e.message}".boldRed())
                         throw UsageError("Failed to resolve DNS for $url: $it".boldRed())
                     }
                 }
