@@ -1,5 +1,5 @@
 # Build stage
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM eclipse-temurin:25-jdk-alpine AS build
 
 # Install necessary dependencies for building
 RUN apk add --no-cache bash grep sed
@@ -30,7 +30,7 @@ RUN VERSION=$(./gradlew properties -q | grep "version:" | awk '{print $2}') && \
     ln -s /app/build/libs/kanon-$VERSION-fat.jar /app/kanon.jar
 
 # Runtime stage
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 
 # Set working directory
 WORKDIR /app

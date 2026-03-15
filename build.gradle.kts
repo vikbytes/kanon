@@ -1,5 +1,5 @@
 plugins {
-    kotlin("jvm") version "2.2.0"
+    kotlin("jvm") version "2.3.0"
     application
     id("org.graalvm.buildtools.native") version "0.10.6"
 }
@@ -34,7 +34,7 @@ dependencies {
 
 tasks.test { useJUnitPlatform() }
 
-kotlin { jvmToolchain(21) }
+kotlin { jvmToolchain(25) }
 
 application {
     mainClass.set("com.vikbytes.MainKt")
