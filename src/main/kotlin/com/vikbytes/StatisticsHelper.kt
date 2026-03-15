@@ -1,8 +1,9 @@
 package com.vikbytes
 
-import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import org.HdrHistogram.Histogram
 
 object StatisticsHelper {
@@ -10,10 +11,10 @@ object StatisticsHelper {
     data class RequestStatistics(
         val successCount: AtomicInteger = AtomicInteger(0),
         val failureCount: AtomicInteger = AtomicInteger(0),
-        val responseTimes: MutableList<Long> = Collections.synchronizedList(mutableListOf()),
+        val responseTimes: ConcurrentLinkedQueue<Long> = ConcurrentLinkedQueue(),
         val statusCodes: ConcurrentHashMap<Int, AtomicInteger> = ConcurrentHashMap(),
-        val requestBytes: AtomicInteger = AtomicInteger(0),
-        val responseBytes: AtomicInteger = AtomicInteger(0),
+        val requestBytes: AtomicLong = AtomicLong(0),
+        val responseBytes: AtomicLong = AtomicLong(0),
         val histogram: Histogram = Histogram(3600000L, 2)
     )
 
@@ -32,41 +33,25 @@ object StatisticsHelper {
         val histogram: Histogram
     )
 
-    fun calculateResponseTimeStats(responseTimes: List<Long>): ResponseTimeStats {
-        val sortedTimes = responseTimes.sorted()
-        val totalResponses = sortedTimes.size
+    fun calculateResponseTimeStats(histogram: Histogram): ResponseTimeStats {
+        val min = if (histogram.totalCount > 0) histogram.minValue else 0
+        val max = if (histogram.totalCount > 0) histogram.maxValue else 0
+        val avg = histogram.mean
+        val median = histogram.getValueAtPercentile(50.0).toDouble()
 
-        val min = sortedTimes.firstOrNull() ?: 0
-        val max = sortedTimes.lastOrNull() ?: 0
-        val avg = if (totalResponses > 0) sortedTimes.average() else 0.0
-
-        val median =
-            if (totalResponses > 0) {
-                if (totalResponses % 2 == 0) {
-                    (sortedTimes[totalResponses / 2 - 1].toDouble() + sortedTimes[totalResponses / 2].toDouble()) / 2.0
-                } else {
-                    sortedTimes[totalResponses / 2].toDouble()
-                }
-            } else 0.0
-        val p25 =
-            if (totalResponses > 0) sortedTimes[(totalResponses * 0.25).toInt().coerceAtMost(totalResponses - 1)] else 0
-        val p50 =
-            if (totalResponses > 0) sortedTimes[(totalResponses * 0.50).toInt().coerceAtMost(totalResponses - 1)] else 0
-        val p75 =
-            if (totalResponses > 0) sortedTimes[(totalResponses * 0.75).toInt().coerceAtMost(totalResponses - 1)] else 0
-        val p90 =
-            if (totalResponses > 0) sortedTimes[(totalResponses * 0.90).toInt().coerceAtMost(totalResponses - 1)] else 0
-        val p95 =
-            if (totalResponses > 0) sortedTimes[(totalResponses * 0.95).toInt().coerceAtMost(totalResponses - 1)] else 0
-        val p99 =
-            if (totalResponses > 0) sortedTimes[(totalResponses * 0.99).toInt().coerceAtMost(totalResponses - 1)] else 0
-        val p999 =
-            if (totalResponses > 0) sortedTimes[(totalResponses * 0.999).toInt().coerceAtMost(totalResponses - 1)]
-            else 0
-
-        val histogram = Histogram(3600000L, 2)
-        responseTimes.forEach { histogram.recordValue(it) }
-
-        return ResponseTimeStats(min, max, avg, median, p25, p50, p75, p90, p95, p99, p999, histogram)
+        return ResponseTimeStats(
+            min = min,
+            max = max,
+            avg = avg,
+            median = median,
+            p25 = histogram.getValueAtPercentile(25.0),
+            p50 = histogram.getValueAtPercentile(50.0),
+            p75 = histogram.getValueAtPercentile(75.0),
+            p90 = histogram.getValueAtPercentile(90.0),
+            p95 = histogram.getValueAtPercentile(95.0),
+            p99 = histogram.getValueAtPercentile(99.0),
+            p999 = histogram.getValueAtPercentile(99.9),
+            histogram = histogram
+        )
     }
 }

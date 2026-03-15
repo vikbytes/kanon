@@ -1,15 +1,94 @@
 package com.vikbytes
 
-import org.junit.jupiter.api.Test
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.HdrHistogram.Histogram
+import org.junit.jupiter.api.Test
 
 class StatisticsHelperTest {
 
+    private fun histogramOf(vararg values: Long): Histogram {
+        val histogram = Histogram(3600000L, 2)
+        values.forEach { histogram.recordValue(it) }
+        return histogram
+    }
+
     @Test
-    fun `test calculateResponseTimeStats with empty list`() {
-        val responseTimes = emptyList<Long>()
-        val stats = StatisticsHelper.calculateResponseTimeStats(responseTimes)
+    fun `RequestStatistics should handle concurrent updates correctly`() {
+        val stats = StatisticsHelper.RequestStatistics()
+
+        stats.successCount.incrementAndGet()
+        stats.failureCount.incrementAndGet()
+        stats.requestBytes.addAndGet(1024L)
+        stats.responseBytes.addAndGet(2048L)
+
+        assertEquals(1, stats.successCount.get())
+        assertEquals(1, stats.failureCount.get())
+        assertEquals(1024L, stats.requestBytes.get())
+        assertEquals(2048L, stats.responseBytes.get())
+    }
+
+    @Test
+    fun `RequestStatistics statusCodes should handle concurrent additions`() {
+        val stats = StatisticsHelper.RequestStatistics()
+
+        stats.statusCodes.computeIfAbsent(200) { AtomicInteger(0) }.incrementAndGet()
+        stats.statusCodes.computeIfAbsent(404) { AtomicInteger(0) }.incrementAndGet()
+        stats.statusCodes.computeIfAbsent(200) { AtomicInteger(0) }.incrementAndGet()
+
+        assertEquals(2, stats.statusCodes[200]?.get())
+        assertEquals(1, stats.statusCodes[404]?.get())
+        assertEquals(2, stats.statusCodes.size)
+    }
+
+    @Test
+    fun `RequestStatistics responseTimes should be thread-safe`() {
+        val stats = StatisticsHelper.RequestStatistics()
+
+        stats.responseTimes.add(100L)
+        stats.responseTimes.add(200L)
+        stats.responseTimes.add(150L)
+
+        assertEquals(3, stats.responseTimes.size)
+        assertTrue(stats.responseTimes.contains(100L))
+        assertTrue(stats.responseTimes.contains(200L))
+        assertTrue(stats.responseTimes.contains(150L))
+    }
+
+    @Test
+    fun `calculateResponseTimeStats should handle identical values correctly`() {
+        val histogram = histogramOf(100L, 100L, 100L, 100L, 100L)
+        val stats = StatisticsHelper.calculateResponseTimeStats(histogram)
+
+        assertEquals(100, stats.min)
+        assertEquals(100, stats.max)
+        assertEquals(100, stats.p25)
+        assertEquals(100, stats.p50)
+        assertEquals(100, stats.p75)
+        assertEquals(100, stats.p90)
+        assertEquals(100, stats.p95)
+        assertEquals(100, stats.p99)
+        assertEquals(100, stats.p999)
+    }
+
+    @Test
+    fun `calculateResponseTimeStats should handle three values correctly`() {
+        val histogram = histogramOf(10L, 20L, 30L)
+        val stats = StatisticsHelper.calculateResponseTimeStats(histogram)
+
+        assertEquals(10, stats.min)
+        assertEquals(30, stats.max)
+        assertTrue(stats.p25 >= 10)
+        assertTrue(stats.p50 >= 10)
+        assertTrue(stats.p75 >= 10)
+        assertEquals(3, stats.histogram.totalCount)
+    }
+
+    @Test
+    fun `test calculateResponseTimeStats with empty histogram`() {
+        val histogram = Histogram(3600000L, 2)
+        val stats = StatisticsHelper.calculateResponseTimeStats(histogram)
 
         assertEquals(0, stats.min)
         assertEquals(0, stats.max)
@@ -26,13 +105,11 @@ class StatisticsHelperTest {
 
     @Test
     fun `test calculateResponseTimeStats with single value`() {
-        val responseTimes = listOf(100L)
-        val stats = StatisticsHelper.calculateResponseTimeStats(responseTimes)
+        val histogram = histogramOf(100L)
+        val stats = StatisticsHelper.calculateResponseTimeStats(histogram)
 
         assertEquals(100, stats.min)
         assertEquals(100, stats.max)
-        assertEquals(100.0, stats.avg)
-        assertEquals(100.0, stats.median)
         assertEquals(100, stats.p50)
         assertEquals(100, stats.p75)
         assertEquals(100, stats.p90)
@@ -44,74 +121,58 @@ class StatisticsHelperTest {
 
     @Test
     fun `test calculateResponseTimeStats with multiple values`() {
-        val responseTimes = listOf(10L, 20L, 30L, 40L, 50L, 60L, 70L, 80L, 90L, 100L)
-        val stats = StatisticsHelper.calculateResponseTimeStats(responseTimes)
+        val histogram = histogramOf(10L, 20L, 30L, 40L, 50L, 60L, 70L, 80L, 90L, 100L)
+        val stats = StatisticsHelper.calculateResponseTimeStats(histogram)
 
         assertEquals(10, stats.min)
         assertEquals(100, stats.max)
-        assertEquals(55.0, stats.avg)
-        assertEquals(55.0, stats.median)
-        assertEquals(60, stats.p50)  // Index 5 (50% of 10 items)
-        assertEquals(80, stats.p75)
-        assertEquals(100, stats.p90)  // Index 9 (90% of 10 items)
-        assertEquals(100, stats.p95)
-        assertEquals(100, stats.p99)
-        assertEquals(100, stats.p999)
+        assertTrue(stats.p50 in 40..60)
+        assertTrue(stats.p75 in 70..80)
+        assertTrue(stats.p90 in 90..100)
         assertEquals(10, stats.histogram.totalCount)
     }
 
     @Test
     fun `test calculateResponseTimeStats with even number of values`() {
-        val responseTimes = listOf(10L, 20L, 30L, 40L, 50L, 60L, 70L, 80L)
-        val stats = StatisticsHelper.calculateResponseTimeStats(responseTimes)
+        val histogram = histogramOf(10L, 20L, 30L, 40L, 50L, 60L, 70L, 80L)
+        val stats = StatisticsHelper.calculateResponseTimeStats(histogram)
 
         assertEquals(10, stats.min)
         assertEquals(80, stats.max)
-        assertEquals(45.0, stats.avg)
-        assertEquals(45.0, stats.median) // (40 + 50) / 2 = 45
-        assertEquals(50, stats.p50)  // Index 4 (50% of 8 items)
-        assertEquals(70, stats.p75)
-        assertEquals(80, stats.p90)
-        assertEquals(80, stats.p95)
-        assertEquals(80, stats.p99)
-        assertEquals(80, stats.p999)
+        assertTrue(stats.p50 in 40..50)
+        assertTrue(stats.p75 in 60..70)
+        assertTrue(stats.p90 in 70..80)
         assertEquals(8, stats.histogram.totalCount)
     }
 
     @Test
     fun `test calculateResponseTimeStats with odd number of values`() {
-        val responseTimes = listOf(10L, 20L, 30L, 40L, 50L, 60L, 70L)
-        val stats = StatisticsHelper.calculateResponseTimeStats(responseTimes)
+        val histogram = histogramOf(10L, 20L, 30L, 40L, 50L, 60L, 70L)
+        val stats = StatisticsHelper.calculateResponseTimeStats(histogram)
 
         assertEquals(10, stats.min)
         assertEquals(70, stats.max)
-        assertEquals(40.0, stats.avg)
-        assertEquals(40.0, stats.median) // Middle value is 40
-        assertEquals(40, stats.p50)
-        assertEquals(60, stats.p75)
-        assertEquals(70, stats.p90)
-        assertEquals(70, stats.p95)
-        assertEquals(70, stats.p99)
-        assertEquals(70, stats.p999)
+        assertTrue(stats.p50 in 30..40)
+        assertTrue(stats.p75 in 50..60)
+        assertTrue(stats.p90 in 60..70)
         assertEquals(7, stats.histogram.totalCount)
     }
 
     @Test
     fun `test calculateResponseTimeStats with large number of values`() {
-        // Create a list of 1000 response times from 1 to 1000
-        val responseTimes = (1..1000).map { it.toLong() }
-        val stats = StatisticsHelper.calculateResponseTimeStats(responseTimes)
+        val histogram = Histogram(3600000L, 2)
+        for (i in 1..1000) {
+            histogram.recordValue(i.toLong())
+        }
+        val stats = StatisticsHelper.calculateResponseTimeStats(histogram)
 
         assertEquals(1, stats.min)
-        assertEquals(1000, stats.max)
-        assertEquals(500.5, stats.avg)
-        assertEquals(500.5, stats.median)
-        assertEquals(501, stats.p50)  // Index 500 (50% of 1000 items)
-        assertEquals(751, stats.p75)  // Index 750 (75% of 1000 items)
-        assertEquals(901, stats.p90)  // Index 900 (90% of 1000 items)
-        assertEquals(951, stats.p95)  // Index 950 (95% of 1000 items)
-        assertEquals(991, stats.p99)  // Index 990 (99% of 1000 items)
-        assertEquals(1000, stats.p999)  // Index 999 (99.9% of 1000 items)
+        assertTrue(stats.max in 999..1010, "max was ${stats.max}")
+        assertTrue(stats.p50 in 480..520, "p50 was ${stats.p50}")
+        assertTrue(stats.p75 in 730..770, "p75 was ${stats.p75}")
+        assertTrue(stats.p90 in 880..920, "p90 was ${stats.p90}")
+        assertTrue(stats.p95 in 930..970, "p95 was ${stats.p95}")
+        assertTrue(stats.p99 in 980..1010, "p99 was ${stats.p99}")
         assertEquals(1000, stats.histogram.totalCount)
     }
 
@@ -123,8 +184,63 @@ class StatisticsHelperTest {
         assertEquals(0, stats.failureCount.get())
         assertTrue(stats.responseTimes.isEmpty())
         assertTrue(stats.statusCodes.isEmpty())
-        assertEquals(0, stats.requestBytes.get())
-        assertEquals(0, stats.responseBytes.get())
+        assertEquals(0L, stats.requestBytes.get())
+        assertEquals(0L, stats.responseBytes.get())
         assertEquals(0, stats.histogram.totalCount)
+    }
+
+    @Test
+    fun `calculateResponseTimeStats avg is much higher than median for skewed distribution`() {
+        val histogram = Histogram(3600000L, 2)
+        repeat(99) { histogram.recordValue(1L) }
+        histogram.recordValue(10000L)
+
+        val stats = StatisticsHelper.calculateResponseTimeStats(histogram)
+
+        // avg should be ~100, median should be 1
+        assertTrue(stats.avg > 90, "avg (${stats.avg}) should be much higher than median for skewed data")
+        assertEquals(1.0, stats.median, "median should be 1.0 for skewed distribution")
+        assertEquals(1, stats.min)
+        assertTrue(stats.max in 9990..10100, "max was ${stats.max}")
+    }
+
+    @Test
+    fun `ConcurrentLinkedQueue responseTimes handles concurrent writes`() {
+        val stats = StatisticsHelper.RequestStatistics()
+        val threads = (1..100).map { i ->
+            Thread { stats.responseTimes.add(i.toLong()) }
+        }
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+
+        assertEquals(100, stats.responseTimes.size, "All 100 concurrent additions should be reflected")
+    }
+
+    @Test
+    fun `AtomicLong requestBytes handles values above Int MAX_VALUE`() {
+        val stats = StatisticsHelper.RequestStatistics()
+        val largeValue = Int.MAX_VALUE.toLong() + 1000L
+        stats.requestBytes.addAndGet(largeValue)
+
+        assertEquals(largeValue, stats.requestBytes.get(), "AtomicLong should handle values above Int.MAX_VALUE")
+        assertTrue(stats.requestBytes.get() > Int.MAX_VALUE, "Value should exceed Int.MAX_VALUE")
+    }
+
+    @Test
+    fun `histogram-based stats match percentile order`() {
+        val histogram = Histogram(3600000L, 2)
+        // Record values 1 through 100
+        for (i in 1..100) histogram.recordValue(i.toLong())
+
+        val stats = StatisticsHelper.calculateResponseTimeStats(histogram)
+
+        assertTrue(stats.min <= stats.p25, "min <= p25")
+        assertTrue(stats.p25 <= stats.p50, "p25 <= p50")
+        assertTrue(stats.p50 <= stats.p75, "p50 <= p75")
+        assertTrue(stats.p75 <= stats.p90, "p75 <= p90")
+        assertTrue(stats.p90 <= stats.p95, "p90 <= p95")
+        assertTrue(stats.p95 <= stats.p99, "p95 <= p99")
+        assertTrue(stats.p99 <= stats.p999, "p99 <= p999")
+        assertTrue(stats.p999 <= stats.max, "p999 <= max")
     }
 }
