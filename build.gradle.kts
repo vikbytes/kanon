@@ -6,7 +6,7 @@ plugins {
 
 group = "com.vikbytes"
 
-version = "1.1.0"
+version = "1.3.0"
 
 tasks.register("generateVersionProperties") {
     doLast {
@@ -23,16 +23,18 @@ repositories { mavenCentral() }
 
 dependencies {
     testImplementation(kotlin("test"))
+    testImplementation("io.ktor:ktor-client-mock:3.1.3")
+    testImplementation("com.github.ajalt.clikt:clikt:4.4.0")
     implementation("io.ktor:ktor-client-core:3.1.3")
     implementation("io.ktor:ktor-client-java:3.1.3")
-    implementation("com.github.ajalt.clikt:clikt:3.5.2")
+    implementation("com.github.ajalt.clikt:clikt:4.4.0")
     implementation("org.slf4j:slf4j-nop:2.0.17")
     implementation("org.hdrhistogram:HdrHistogram:2.1.12")
 }
 
 tasks.test { useJUnitPlatform() }
 
-kotlin { jvmToolchain(24) }
+kotlin { jvmToolchain(21) }
 
 application {
     mainClass.set("com.vikbytes.MainKt")
@@ -63,7 +65,8 @@ graalvmNative {
             buildArgs.add("-Dsun.stderr.encoding=UTF-8")
 
             buildArgs.add(
-                "--initialize-at-build-time=io.ktor,kotlinx.coroutines,kotlin,org.slf4j,kotlinx.io.bytestring.ByteString,kotlinx.io.bytestring.ByteString\$Companion,kotlinx.io.Buffer")
+                "--initialize-at-build-time=io.ktor,kotlinx.coroutines,kotlin,org.slf4j,kotlinx.io.bytestring.ByteString,kotlinx.io.bytestring.ByteString\$Companion,kotlinx.io.Buffer"
+            )
 
             // Verbose output for debugging build issues
             // buildArgs.add("--verbose")
@@ -76,28 +79,29 @@ tasks.register("createReflectionConfig") {
         file("reflection-config.json")
             .writeText(
                 """
-        [
-          {
-            "name": "com.vikbytes.KanonCommand",
-            "allDeclaredConstructors": true,
-            "allPublicConstructors": true,
-            "allDeclaredMethods": true,
-            "allPublicMethods": true,
-            "allDeclaredFields": true,
-            "allPublicFields": true
-          },
-          {
-            "name": "kotlin.reflect.jvm.internal.ReflectionFactoryImpl",
-            "allDeclaredConstructors": true
-          },
-          {
-            "name": "io.ktor.client.engine.cio.CIOEngineContainer",
-            "allPublicMethods": true,
-            "allPublicConstructors": true
-          }
-        ]
-        """
-                    .trimIndent())
+                [
+                  {
+                    "name": "com.vikbytes.KanonCommand",
+                    "allDeclaredConstructors": true,
+                    "allPublicConstructors": true,
+                    "allDeclaredMethods": true,
+                    "allPublicMethods": true,
+                    "allDeclaredFields": true,
+                    "allPublicFields": true
+                  },
+                  {
+                    "name": "kotlin.reflect.jvm.internal.ReflectionFactoryImpl",
+                    "allDeclaredConstructors": true
+                  },
+                  {
+                    "name": "io.ktor.client.engine.cio.CIOEngineContainer",
+                    "allPublicMethods": true,
+                    "allPublicConstructors": true
+                  }
+                ]
+                """
+                    .trimIndent()
+            )
     }
 }
 

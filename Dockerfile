@@ -27,7 +27,6 @@ RUN ./gradlew clean fatJar --no-daemon && \
 
 # Get the version from the build.gradle.kts file
 RUN VERSION=$(./gradlew properties -q | grep "version:" | awk '{print $2}') && \
-    # Create a symbolic link to make the JAR easier to reference
     ln -s /app/build/libs/kanon-$VERSION-fat.jar /app/kanon.jar
 
 # Runtime stage
