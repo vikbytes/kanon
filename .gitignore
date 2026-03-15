@@ -47,6 +47,6 @@ bin/
 *.txt
 
 .idea/
-kanon*
-qodana.yaml
+kanon-*
 !kanon_screenshot.png
+.claude
