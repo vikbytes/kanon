@@ -12,13 +12,14 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.system.exitProcess
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 
@@ -30,10 +31,7 @@ object HttpRequests {
             if (followRedirects) {
                 install(HttpRedirect)
             }
-            engine {
-                protocolVersion = java.net.http.HttpClient.Version.HTTP_1_1
-                dispatcher = Dispatchers.Default
-            }
+            engine { protocolVersion = java.net.http.HttpClient.Version.HTTP_1_1 }
             defaultRequest { header(HttpHeaders.Connection, "close") }
         }
     }
@@ -52,7 +50,7 @@ object HttpRequests {
         statistics: StatisticsHelper.RequestStatistics,
         progressTracker: AtomicInteger? = null,
         torture: Boolean = false,
-        noBandwidth: Boolean = false
+        noBandwidth: Boolean = false,
     ): Duration {
         executeRequest(
             client,
@@ -70,78 +68,84 @@ object HttpRequests {
             progressTracker,
             true,
             noBandwidth,
-            statistics.histogram)
+            statistics.histogram,
+        )
         val startTime = System.currentTimeMillis()
-        var dispatcher = Dispatchers.Default.limitedParallelism(concurrency)
-        if (torture) {
-            dispatcher = Dispatchers.Default
-        }
-        val scope = CoroutineScope(dispatcher)
-        val shouldStop = AtomicBoolean(false)
-        val requestCounter = AtomicInteger(0)
-        val endTime =
-            if (durationSeconds != null) {
-                System.currentTimeMillis() + (durationSeconds * 1000L)
-            } else {
-                Long.MAX_VALUE
-            }
+        val executor = Executors.newVirtualThreadPerTaskExecutor()
+        val virtualThreadDispatcher = executor.asCoroutineDispatcher()
+        try {
+            val scope = CoroutineScope(virtualThreadDispatcher)
+            val shouldStop = AtomicBoolean(false)
+            val requestCounter = AtomicInteger(0)
+            val endTime =
+                if (durationSeconds != null) {
+                    System.currentTimeMillis() + (durationSeconds * 1000L)
+                } else {
+                    Long.MAX_VALUE
+                }
 
-        val jobs =
-            List(concurrency) { threadIndex ->
-                scope.launch {
-                    if (totalRequests != null) {
-                        while (!shouldStop.get()) {
-                            if (requestCounter.incrementAndGet() > totalRequests) {
-                                shouldStop.set(true)
-                                break
+            val jobs =
+                List(concurrency) { threadIndex ->
+                    scope.launch {
+                        if (totalRequests != null) {
+                            while (!shouldStop.get()) {
+                                if (requestCounter.incrementAndGet() > totalRequests) {
+                                    shouldStop.set(true)
+                                    break
+                                }
+                                executeRequest(
+                                    client,
+                                    url,
+                                    method,
+                                    headers,
+                                    authorization,
+                                    jsonBody,
+                                    statistics.successCount,
+                                    statistics.failureCount,
+                                    statistics.responseTimes,
+                                    statistics.statusCodes,
+                                    statistics.requestBytes,
+                                    statistics.responseBytes,
+                                    progressTracker,
+                                    false,
+                                    noBandwidth,
+                                    statistics.histogram,
+                                )
                             }
-                            executeRequest(
-                                client,
-                                url,
-                                method,
-                                headers,
-                                authorization,
-                                jsonBody,
-                                statistics.successCount,
-                                statistics.failureCount,
-                                statistics.responseTimes,
-                                statistics.statusCodes,
-                                statistics.requestBytes,
-                                statistics.responseBytes,
-                                progressTracker,
-                                false,
-                                noBandwidth,
-                                statistics.histogram)
-                        }
-                    } else if (durationSeconds != null) {
-                        while (!shouldStop.get()) {
-                            if (System.currentTimeMillis() >= endTime) {
-                                shouldStop.set(true)
-                                break
+                        } else if (durationSeconds != null) {
+                            while (!shouldStop.get()) {
+                                if (System.currentTimeMillis() >= endTime) {
+                                    shouldStop.set(true)
+                                    break
+                                }
+                                executeRequest(
+                                    client,
+                                    url,
+                                    method,
+                                    headers,
+                                    authorization,
+                                    jsonBody,
+                                    statistics.successCount,
+                                    statistics.failureCount,
+                                    statistics.responseTimes,
+                                    statistics.statusCodes,
+                                    statistics.requestBytes,
+                                    statistics.responseBytes,
+                                    progressTracker,
+                                    false,
+                                    noBandwidth,
+                                    statistics.histogram,
+                                )
                             }
-                            executeRequest(
-                                client,
-                                url,
-                                method,
-                                headers,
-                                authorization,
-                                jsonBody,
-                                statistics.successCount,
-                                statistics.failureCount,
-                                statistics.responseTimes,
-                                statistics.statusCodes,
-                                statistics.requestBytes,
-                                statistics.responseBytes,
-                                progressTracker,
-                                false,
-                                noBandwidth,
-                                statistics.histogram)
                         }
                     }
                 }
-            }
 
-        jobs.joinAll()
+            jobs.joinAll()
+        } finally {
+            virtualThreadDispatcher.close()
+            executor.shutdown()
+        }
 
         val finalTime = System.currentTimeMillis()
         return Duration.parse("${finalTime - startTime}ms")
@@ -161,7 +165,7 @@ object HttpRequests {
         headless: Boolean,
         torture: Boolean = false,
         noBandwidth: Boolean = false,
-        followRedirects: Boolean = false
+        followRedirects: Boolean = false,
     ): String {
         val client = createHttpClient(requestTimeout, followRedirects)
 
@@ -171,7 +175,7 @@ object HttpRequests {
             if (!headless) {
                 if (totalRequests != null) {
                     val message = "Executing requests"
-                    val (job, progress) = LoadingAnimation.startProgressBar(message, totalRequests)
+                    val (_, progress) = LoadingAnimation.startProgressBar(message, totalRequests)
                     progressTracker = progress
                 } else {
                     val message = "Executing requests for ${durationSeconds}s"
@@ -182,7 +186,7 @@ object HttpRequests {
                 progressTracker = null
             }
 
-            executeRequestsInParallel(
+            val elapsed = executeRequestsInParallel(
                 client,
                 url,
                 method,
@@ -195,21 +199,17 @@ object HttpRequests {
                 statistics,
                 progressTracker,
                 torture,
-                noBandwidth)
+                noBandwidth,
+            )
 
             if (!headless) {
                 LoadingAnimation.stopAnimation()
                 println()
             }
 
-            val totalExecutionTime =
-                if (statistics.responseTimes.isNotEmpty()) {
-                    (statistics.responseTimes.sum() / concurrency)
-                } else {
-                    0L
-                }
+            val totalExecutionTime = elapsed.inWholeMilliseconds
 
-            val responseTimeStats = calculateResponseTimeStats(statistics.responseTimes)
+            val responseTimeStats = calculateResponseTimeStats(statistics.histogram)
             val results =
                 formatResults(statistics, totalExecutionTime, concurrency, responseTimeStats, noBandwidth, torture)
 
@@ -244,14 +244,14 @@ object HttpRequests {
         jsonBody: String?,
         successCount: AtomicInteger,
         failureCount: AtomicInteger,
-        responseTimes: MutableList<Long>,
+        responseTimes: java.util.Queue<Long>,
         statusCodes: ConcurrentHashMap<Int, AtomicInteger>,
-        requestBytes: AtomicInteger,
-        responseBytes: AtomicInteger,
+        requestBytes: java.util.concurrent.atomic.AtomicLong,
+        responseBytes: java.util.concurrent.atomic.AtomicLong,
         progressTracker: AtomicInteger? = null,
         silent: Boolean = false,
         noBandwidth: Boolean = false,
-        histogram: org.HdrHistogram.Histogram? = null
+        histogram: org.HdrHistogram.Histogram? = null,
     ) {
         try {
             val startTime = System.currentTimeMillis()
@@ -263,7 +263,7 @@ object HttpRequests {
                 requestSize += method.length + url.length + 12
 
                 // Add headers size estimation
-                headers?.split(",")?.forEach { header ->
+                headers?.split("\n")?.forEach { header ->
                     val parts = header.split(":", limit = 2)
                     if (parts.size == 2) {
                         // Header name + ": " + value + "\r\n"
@@ -295,14 +295,14 @@ object HttpRequests {
                 // Add final \r\n that separates headers from body
                 requestSize += 2
 
-                requestBytes.addAndGet(requestSize)
+                requestBytes.addAndGet(requestSize.toLong())
             }
 
             val response =
                 client.request(url) {
                     this.method = HttpMethod.parse(method)
 
-                    headers?.split(",")?.forEach { header ->
+                    headers?.split("\n")?.forEach { header ->
                         val parts = header.split(":", limit = 2)
                         if (parts.size == 2) {
                             header(parts[0].trim(), parts[1].trim())
@@ -329,8 +329,7 @@ object HttpRequests {
                 // Add common response headers estimation (conservative estimate)
                 // Common headers like Content-Type, Content-Length, Date, Server, etc.
                 responseSize += 150
-                responseBytes.addAndGet(responseSize)
-                responseBytes.addAndGet(responseBody.toByteArray().size)
+                responseBytes.addAndGet(responseSize.toLong())
             }
 
             val endTime = System.currentTimeMillis()
