@@ -111,7 +111,7 @@ class CurlHelpersTest {
 
         assertEquals("https://example.com", result["url"])
         assertEquals("GET", result["method"])
-        assertEquals("Content-Type: application/json,Authorization: Bearer token", result["headers"])
+        assertEquals("Content-Type: application/json\nAuthorization: Bearer token", result["headers"])
         assertEquals("Bearer token", result["authorization"])
         assertEquals(null, result["body"])
         assertEquals("false", result["followRedirects"])
@@ -482,5 +482,69 @@ class CurlHelpersTest {
         assertEquals("https://example.com/api", result.url)
         assertEquals("POST", result.method)
         assertEquals("@data.json", result.body)
+    }
+
+    @Test
+    fun `test processCurlCommand with three headers uses newline separator`() {
+        val curlString =
+            "curl -H \"Content-Type: application/json\" -H \"Accept: text/html\" -H \"X-Request-Id: abc123\" https://example.com"
+        val result = CurlHelpers.processCurlCommand(curlString, false, "")
+
+        val headers = result["headers"]!!
+        // Should have exactly 2 newlines separating 3 headers
+        val newlineCount = headers.count { it == '\n' }
+        assertEquals(2, newlineCount, "Three headers should be separated by exactly 2 newlines")
+        // Should contain no commas as separators
+        assertFalse(
+            headers.contains("json,") || headers.contains("html,"),
+            "Headers should not use commas as separators: $headers"
+        )
+        assertTrue(headers.contains("Content-Type: application/json"))
+        assertTrue(headers.contains("Accept: text/html"))
+        assertTrue(headers.contains("X-Request-Id: abc123"))
+    }
+
+    @Test
+    fun `test parseCurlCommand with data-binary flag`() {
+        val curlString = "curl --data-binary '{\"binary\": true}' https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("https://example.com", result.url)
+        assertEquals("POST", result.method)
+        assertEquals("{\"binary\": true}", result.body)
+    }
+
+    @Test
+    fun `test parseCurlCommand with colon in header value`() {
+        val curlString = "curl -H \"Authorization: Basic user:pass\" https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("Basic user:pass", result.headers["Authorization"],
+            "Colon in header value should be preserved")
+    }
+
+    @Test
+    fun `test parseCurlCommand with data-ascii flag`() {
+        val curlString = "curl --data-ascii 'key=value' https://example.com"
+        val result = CurlHelpers.parseCurlCommand(curlString)
+
+        assertEquals("POST", result.method)
+        assertEquals("key=value", result.body)
+    }
+
+    @Test
+    fun `test processCurlCommand header value with commas is not split`() {
+        val curlString =
+            "curl -H \"Accept: text/html, application/xhtml+xml, application/xml;q=0.9\" https://example.com"
+        val result = CurlHelpers.processCurlCommand(curlString, false, "")
+
+        val headers = result["headers"]!!
+        // The full Accept value with commas should be preserved in a single header line
+        assertTrue(
+            headers.contains("Accept: text/html, application/xhtml+xml, application/xml;q=0.9"),
+            "Header value commas should be preserved: $headers"
+        )
+        // Should be a single header, no newlines
+        assertFalse(headers.contains("\n"), "Should be a single header line")
     }
 }

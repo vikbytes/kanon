@@ -34,7 +34,7 @@ object CurlHelpers {
 
             if (curlCommand.headers.isNotEmpty()) {
                 val headersList = curlCommand.headers.map { "${it.key}: ${it.value}" }
-                result["headers"] = headersList.joinToString(",")
+                result["headers"] = headersList.joinToString("\n")
 
                 val authHeader = curlCommand.headers["Authorization"] ?: curlCommand.headers["authorization"]
                 if (authHeader != null) {
@@ -64,14 +64,8 @@ object CurlHelpers {
     }
 
     fun parseCurlCommand(curlString: String): CurlCommand {
-        val normalizedCurlString =
-            if (!curlString.trim().startsWith("curl ")) {
-                "curl $curlString"
-            } else {
-                curlString
-            }
         val trimmedCommand =
-            normalizedCurlString.trim().let { if (it.startsWith("curl ")) it.substring(5).trim() else it }
+            curlString.trim().let { if (it.startsWith("curl ")) it.substring(5).trim() else it }
 
         var url = ""
         var method = "GET"
