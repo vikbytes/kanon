@@ -103,4 +103,41 @@ class LoadingAnimationTest {
 
         LoadingAnimation.stopAnimation()
     }
+
+    @Test
+    fun `test stopAnimation without starting does not throw`() {
+        // Should complete without exception on a fresh state
+        LoadingAnimation.stopAnimation()
+    }
+
+    @Test
+    fun `test double stopAnimation does not throw`() = runBlocking {
+        val (job, _) = LoadingAnimation.startProgressBar("Testing", 100)
+        assertTrue(job.isActive)
+
+        LoadingAnimation.stopAnimation()
+        delay(50)
+        // Second stop on already-stopped animation should be safe
+        LoadingAnimation.stopAnimation()
+
+        assertTrue(job.isCancelled)
+    }
+
+    @Test
+    fun `test spinner reflects updated counts`() = runBlocking {
+        val successCount = AtomicInteger(0)
+        val failureCount = AtomicInteger(0)
+
+        val job = LoadingAnimation.startRequestSpinner("Testing", successCount, failureCount)
+
+        successCount.set(42)
+        failureCount.set(3)
+        delay(150) // Let the spinner render at least once with updated values
+
+        assertTrue(job.isActive)
+        assertEquals(42, successCount.get())
+        assertEquals(3, failureCount.get())
+
+        LoadingAnimation.stopAnimation()
+    }
 }

@@ -6,7 +6,7 @@ import kotlinx.coroutines.*
 
 object LoadingAnimation {
     private val isRunning = AtomicBoolean(false)
-    private var animationJob: Job? = null
+    @Volatile private var animationJob: Job? = null
 
     private val spinnerFrames = listOf("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
