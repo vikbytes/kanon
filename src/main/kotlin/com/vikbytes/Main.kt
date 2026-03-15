@@ -93,19 +93,20 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
         }
     }
 
-    fun validateUrl(url: String) {
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            return "http://$url"
-                .let {
-                    try {
-                        InetAddress.getByName(URI(it).host)
-                        url.replace("http://", "https://")
-                    } catch (e: Exception) {
-                        println("Failed to resolve DNS for $url: ${e.message}".boldRed())
-                        throw UsageError("Failed to resolve DNS for $url: $it".boldRed())
-                    }
-                }
+    fun validateUrl(url: String): String {
+        val effectiveUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            val testUrl = "http://$url"
+            try {
+                InetAddress.getByName(URI(testUrl).host)
+            } catch (e: Exception) {
+                println("Failed to resolve DNS for $url: ${e.message}".boldRed())
+                throw UsageError("Failed to resolve DNS for $url".boldRed())
+            }
+            "https://$url"
+        } else {
+            url
         }
+        return effectiveUrl
     }
 
     override fun run() {
@@ -116,8 +117,8 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
 
         validateArguments()
 
-        val requestParams = getRequestParameters()
-        validateUrl(requestParams["url"]!!)
+        val requestParams = getRequestParameters().toMutableMap()
+        requestParams["url"] = validateUrl(requestParams["url"]!!)
 
         displayRequestInfo(requestParams)
 
@@ -143,7 +144,7 @@ class KanonCommand : CliktCommand(help = "A tool for load testing HTTP endpoints
     fun getRequestParameters(): Map<String, String?> {
         var requestUrl = url
         var requestMethod = method
-        var requestHeaders = headers
+        var requestHeaders = headers?.replace(",", "\n")
         var requestAuthorization = authorization
         var requestJsonBody = jsonBody
         var requestFollowRedirects = followRedirects.toString()
