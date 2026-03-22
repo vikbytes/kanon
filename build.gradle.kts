@@ -65,7 +65,7 @@ graalvmNative {
             buildArgs.add("-Dsun.stderr.encoding=UTF-8")
 
             buildArgs.add(
-                "--initialize-at-build-time=io.ktor,kotlinx.coroutines,kotlin,org.slf4j,kotlinx.io.bytestring.ByteString,kotlinx.io.bytestring.ByteString\$Companion,kotlinx.io.Buffer"
+                "--initialize-at-build-time=io.ktor,kotlinx.coroutines,kotlin,org.slf4j,kotlinx.io.bytestring.ByteString,kotlinx.io.bytestring.ByteString\$Companion,kotlinx.io.Buffer,com.github.ajalt.mordant.internal.nativeimage.NativeImagePosixMppImpls"
             )
 
             // Verbose output for debugging build issues

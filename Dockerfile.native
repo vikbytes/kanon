@@ -1,7 +1,5 @@
 FROM container-registry.oracle.com/graalvm/native-image:25
 
-RUN microdnf install -y findutils grep sed
-
 WORKDIR /app
 COPY . /app
 
